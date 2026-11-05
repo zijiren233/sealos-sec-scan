@@ -1,0 +1,98 @@
+rules:
+  # ---- Core family: caller-supplied kubeconfig text loaded into a K8s client ----
+  # Any request later issued through such a client executes credential plugins
+  # (user.exec spawnSync / auth-provider azure|gcp execSync) inside the server pod.
+
+  - id: sealos-user-kubeconfig-into-loadfromstring
+    message: >-
+      Caller-controlled kubeconfig text reaches KubeConfig.loadFromString. A
+      subsequent request through this client executes credential plugins in the
+      server pod (RCE). Reject exec / auth-provider / tokenFile stanzas at the
+      trust boundary or rebuild the config with inline credentials only.
+    severity: ERROR
+    languages: [typescript, javascript]
+    mode: taint
+    options:
+      symbolic_propagation: true
+    pattern-sources:
+      - pattern-either:
+          - pattern: $REQ.headers['authorization']
+          - pattern: $REQ.headers['Authorization']
+          - pattern: $REQ.headers.authorization
+          - pattern: $REQ.headers[...]['authorization']
+          - pattern: $HDR.get('Authorization')
+          - pattern: $HDR.get('authorization')
+          - pattern: $RES.getHeader('Authorization')
+          - pattern: decodeURIComponent(...)
+          - pattern: authSession(...)
+    pattern-sinks:
+      - pattern-either:
+          - pattern: $KC.loadFromString(...)
+          - pattern: loadFromString(...)
+          - pattern: K8sApi(...)
+
+  - id: sealos-user-kubeconfig-into-clientcmd
+    message: >-
+      Caller-controlled kubeconfig reaches client-go (clientcmd). The first
+      request built from this config spawns the exec credential plugin in the
+      server process (RCE). Validate AuthInfos for Exec/AuthProvider before
+      loading, or only accept inline token/cert data.
+    severity: ERROR
+    languages: [go]
+    mode: taint
+    options:
+      symbolic_propagation: true
+    pattern-sources:
+      - pattern-either:
+          - pattern: $REQ.Header.Get("Authorization")
+          - pattern: url.PathUnescape(...)
+          - pattern: $REQ.PostFormValue("kubeconfig")
+          - pattern: $REQ.URL.Query().Get("kubeconfig")
+    pattern-sinks:
+      - pattern-either:
+          - pattern: clientcmd.RESTConfigFromKubeConfig(...)
+          - pattern: clientcmd.NewNonInteractiveDeferredLoadingClientConfig(...)
+          - pattern: clientcmd.NewClientConfigFromBytes(...)
+          - pattern: clientcmd.Load(...)
+
+  - id: sealos-initk8s-with-request
+    message: >-
+      initK8s({ req }) consumes the caller-supplied kubeconfig header. Ensure
+      the route never issues requests through this client before the config is
+      validated (no exec / auth-provider / tokenFile stanzas).
+    severity: WARNING
+    languages: [typescript, javascript]
+    pattern: initK8s({ ..., req, ... })
+
+  # ---- Shell construction with interpolation (Node) ----
+  - id: node-exec-template-literal-injection
+    message: >-
+      child_process exec with an interpolated template literal runs through a
+      shell — command injection if any segment is request-derived. Use execFile
+      with an argv array.
+    severity: ERROR
+    languages: [typescript, javascript]
+    pattern-either:
+      - pattern: exec(`...${...}...`, ...)
+      - pattern: execSync(`...${...}...`, ...)
+    metavariable-regex:
+      - metavariable: $EXEC
+        regex: (?i)^(exec|execsync|execasync|p_exec)$
+
+  - id: node-spawn-shell-true
+    message: "spawn with shell: true turns argv into a shell command line."
+    severity: WARNING
+    languages: [typescript, javascript]
+    pattern: "spawn(..., { ..., shell: true, ... })"
+
+  # ---- Shell construction with interpolation (Go) ----
+  - id: go-exec-command-concat
+    message: >-
+      exec.Command built by string concatenation/format. Keep argv separate;
+      never join request-derived data into a single command string.
+    severity: WARNING
+    languages: [go]
+    pattern-either:
+      - pattern: exec.Command($A + $B, ...)
+      - pattern: exec.CommandContext($CTX, $A + $B, ...)
+      - pattern: exec.Command(fmt.Sprintf(...), ...)

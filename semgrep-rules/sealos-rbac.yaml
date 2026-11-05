@@ -1,0 +1,52 @@
+rules:
+  - id: k8s-clusterrole-wildcard-on-sensitive-resources
+    message: >-
+      ClusterRole grants wildcard verbs on sensitive resources. A pod compromised
+      through this role binding gains cluster-wide read/write of secrets, exec or
+      service accounts. Scope to namespaces (Role) or restrict verbs/resources.
+    severity: WARNING
+    languages: [yaml]
+    patterns:
+      - pattern-inside: |
+          kind: ClusterRole
+          ...
+      - pattern: |
+          resources:
+            ...
+            - $RES
+            ...
+          verbs:
+            ...
+            - '*'
+      - metavariable-regex:
+          metavariable: $RES
+          regex: ^(secrets|pods|pods/exec|pods/log|serviceaccounts|\*)$
+
+  - id: kubeconfig-auth-provider-cmd-plugin
+    message: >-
+      kubeconfig carries an azure/gcp auth-provider with cmd-path. The
+      client-node library executes cmd-path via the shell during authentication —
+      treat such kubeconfigs as code, never as data.
+    severity: WARNING
+    languages: [yaml]
+    patterns:
+      - pattern-inside: |
+          auth-provider:
+            ...
+      - pattern: |
+          name: $NAME
+          config:
+            ...
+            cmd-path: ...
+      - metavariable-regex:
+          metavariable: $NAME
+          regex: ^(azure|gcp)$
+
+  - id: k8s-automount-service-account-token-true
+    message: >-
+      Pod explicitly automounts the service account token. Disable it unless the
+      workload talks to the API server.
+    severity: INFO
+    languages: [yaml]
+    pattern: |
+      automountServiceAccountToken: true

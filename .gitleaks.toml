@@ -1,0 +1,19 @@
+title = "sealos-sec-scan gitleaks configuration"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "global allowlist"
+paths = [
+  '''(.*?)(jpe?g|png|gif|svg|ico|webp)''',
+  '''testdata\/''',
+  '''vendor\/''',
+  '''node_modules\/''',
+  '''\.min\.(js|css)''',
+  '''go\.sum''',
+  '''pnpm-lock\.yaml''',
+  '''package-lock\.json''',
+  '''yarn\.lock''',
+  '''bun\.lock''',
+]

@@ -1,0 +1,21 @@
+# Trivy filesystem scan configuration (used for local runs; the CI step
+# passes the equivalent flags via trivy-action inputs).
+scan:
+  scanners:
+    - vuln
+    - misconfig
+    - secret
+  skip-dirs:
+    - node_modules
+    - vendor
+    - .git
+    - dist
+    - lifecycle/staging
+vulnerability:
+  type:
+    - os
+    - library
+  ignore-unfixed: true
+severity:
+  - HIGH
+  - CRITICAL

@@ -1,0 +1,42 @@
+# Scan targets. `enabled` defaults to true. `branch` omitted = default branch.
+# workflow_dispatch input `only` accepts a regex to filter by name.
+targets:
+  - name: sealos
+    repo: labring/sealos
+
+  - name: applaunchpad
+    repo: sealos-apps/applaunchpad
+  - name: devbox
+    repo: sealos-apps/devbox
+  - name: objectstorage
+    repo: sealos-apps/objectstorage
+  - name: terminal
+    repo: sealos-apps/terminal
+  - name: database
+    repo: sealos-apps/database
+  - name: sealaf
+    repo: sealos-apps/sealaf
+  - name: cronjob
+    repo: sealos-apps/cronjob
+  - name: admin
+    repo: sealos-apps/admin
+  - name: template
+    repo: sealos-apps/template
+  - name: kubepanel
+    repo: sealos-apps/kubepanel
+  - name: aiproxy
+    repo: sealos-apps/aiproxy
+  - name: kite
+    repo: sealos-apps/kite
+  - name: agent-hub
+    repo: sealos-apps/agent-hub
+  - name: vege-basket
+    repo: sealos-apps/vege-basket
+  - name: sway
+    repo: sealos-apps/sway
+  - name: ai-agent-switch
+    repo: sealos-apps/ai-agent-switch
+
+  # Private fork of the main repo; enable only if the runner can read it.
+  # - name: private-sealos
+  #   repo: sealos-apps/private-sealos

@@ -1,0 +1,150 @@
+name: Static Security Scan
+
+on:
+  schedule:
+    - cron: "0 2 * * 0" # Sundays 02:00 UTC
+  workflow_dispatch:
+    inputs:
+      only:
+        description: "Only scan targets matching this regex (empty = all)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: static-scan
+  cancel-in-progress: false
+
+jobs:
+  matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      targets: ${{ steps.gen.outputs.targets }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: gen
+        env:
+          ONLY: ${{ github.event.inputs.only }}
+        run: |
+          python3 - <<'PY'
+          import json, os, re, yaml
+          only = os.environ.get("ONLY") or ""
+          ts = yaml.safe_load(open("targets.yaml"))["targets"]
+          out = [
+              {"name": t["name"], "repo": t["repo"]}
+              for t in ts
+              if t.get("enabled", True) and (not only or re.search(only, t["name"]))
+          ]
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write("targets=" + json.dumps(out) + "\n")
+          print("targets:", [t["name"] for t in out])
+          PY
+
+  scan:
+    needs: matrix
+    if: needs.matrix.outputs.targets != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      max-parallel: 5
+      matrix:
+        target: ${{ fromJSON(needs.matrix.outputs.targets) }}
+    env:
+      TARGET_NAME: ${{ matrix.target.name }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Checkout target
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ matrix.target.repo }}
+          path: target
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache: false
+
+      - name: Detect languages
+        id: langs
+        run: bash scripts/detect-langs.sh target
+
+      # ---------- CodeQL (SAST, per-language) ----------
+      - uses: github/codeql-action/init@v3
+        if: steps.langs.outputs.languages != ''
+        with:
+          languages: ${{ steps.langs.outputs.languages }}
+          queries: security-extended
+          config-file: codeql-config.yml
+          build-mode: "go: none"
+      - uses: github/codeql-action/analyze@v3
+        if: steps.langs.outputs.languages != ''
+        continue-on-error: true
+        with:
+          category: ${{ env.TARGET_NAME }}-codeql
+
+      # ---------- Trivy (deps + IaC + secrets) ----------
+      - name: Prepare output dir
+        run: mkdir -p out
+      - name: Trivy fs scan
+        uses: aquasecurity/trivy-action@0.28.0
+        continue-on-error: true
+        with:
+          scan-type: fs
+          scan-ref: target
+          scanners: vuln,misconfig,secret
+          format: sarif
+          output: out/trivy.sarif
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          skip-dirs: node_modules,vendor,.git,dist,lifecycle/staging
+          exit-code: "0"
+
+      # ---------- CLI tool suite ----------
+      - name: Run semgrep / gitleaks / gosec / osv-scanner / kube-linter / hadolint / zizmor / bandit
+        run: bash scripts/run-tools.sh target out
+        continue-on-error: true
+
+      - name: Merge SARIF
+        run: bash scripts/merge-sarif.sh out
+
+      - name: Upload to code scanning
+        uses: github/codeql-action/upload-sarif@v3
+        continue-on-error: true
+        with:
+          sarif_file: out/merged.sarif
+          category: ${{ env.TARGET_NAME }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sarif-${{ env.TARGET_NAME }}
+          path: out/
+          if-no-files-found: ignore
+
+  summary:
+    needs: [matrix, scan]
+    if: always() && needs.scan.result != 'skipped'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: sarif-*
+          path: results
+          merge-multiple: false
+      - name: Aggregate and pin results issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: bash scripts/summary.sh "$RUN_URL" results

@@ -1,0 +1,13 @@
+name: "CodeQL config"
+
+paths-ignore:
+  - '**/node_modules'
+  - '**/dist'
+  - '**/build'
+  - '**/.next'
+  - '**/vendor'
+  - '**/testdata'
+  - '**/lifecycle/staging'
+  - '**/*.test.ts'
+  - '**/*.test.tsx'
+  - '**/*.spec.ts'
