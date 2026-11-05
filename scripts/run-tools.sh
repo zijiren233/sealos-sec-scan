@@ -4,8 +4,8 @@
 # language or scanner error never fails the job, and every expected SARIF
 # file always exists afterwards (valid empty document when nothing ran).
 set -uo pipefail
-SRC=$1
-OUT=$2
+SRC=$(cd "$1" && pwd)
+OUT=$(cd "$2" && pwd)
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 mkdir -p "$OUT"
 
@@ -69,19 +69,24 @@ fi
 valid_or_empty "$OUT/gitleaks.sarif"
 
 ### gosec (Go SAST, per module)
+# Monorepo handling: sealos carries many independent Go modules under
+# controllers/, service/, lifecycle/ and pkg/. Each module gets its own
+# dependency download (fresh runner = empty module cache) and its own gosec
+# run; workspace interference is disabled per module with GOWORK=off.
 log gosec
 if find "$SRC" -name go.mod -not -path '*/vendor/*' | grep -q .; then
-  go install github.com/securego/gosec/v2/cmd/gosec@v2.22.3 >/dev/null 2>&1 || true
+  go install github.com/securego/gosec/v2/cmd/gosec@v2.30.0 >/dev/null 2>&1 || true
   GOSEC_BIN="$(go env GOPATH)/bin/gosec"
   if [ -x "$GOSEC_BIN" ]; then
     i=0
     while IFS= read -r mod; do
       d="$(dirname "$mod")"
-      case "$d" in */staging*|*/vendor*) continue ;; esac
+      case "$d" in */staging*|*/vendor*|*/.git*) continue ;; esac
       i=$((i+1))
-      "$GOSEC_BIN" -no-fail -exclude-generated \
+      (cd "$d" && GOWORK=off go mod download >/dev/null 2>&1 || true)
+      (cd "$d" && GOWORK=off "$GOSEC_BIN" -no-fail -exclude-generated \
         -severity medium -confidence medium \
-        -fmt sarif -out "$OUT/gosec-$i.sarif" "$d/..." >/dev/null 2>&1 || true
+        -fmt sarif -out "$OUT/gosec-$i.sarif" ./... >/dev/null 2>&1) || true
       valid_or_empty "$OUT/gosec-$i.sarif"
     done < <(find "$SRC" -name go.mod -not -path '*/vendor/*')
   fi
