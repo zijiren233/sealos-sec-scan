@@ -39,3 +39,10 @@ Requires the tools on PATH (brew/pipx/go install); each step skips silently when
 - Tool binaries are version-pinned in `scripts/run-tools.sh`; bump them there.
 - A single tool failure never fails a scan job — every SARIF slot is backfilled with a valid empty document.
 - `node_modules`, `vendor`, lockfiles and the main repo's vendored `lifecycle/staging` tree are excluded from SAST to keep signal high; Trivy still scans lockfiles for known CVEs.
+
+## Private targets
+
+`sealos-apps/*` repositories are private. To scan them, create a fine-grained
+personal access token (Contents: Read-only on the `sealos-apps` organization)
+and add it as the `TARGET_TOKEN` secret in this repository. Without the secret,
+private targets are skipped with a warning and public targets still scan.

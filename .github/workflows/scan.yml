@@ -61,38 +61,49 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Checkout target
+        id: target
         uses: actions/checkout@v4
+        continue-on-error: true
         with:
           repository: ${{ matrix.target.repo }}
           path: target
+          token: ${{ secrets.TARGET_TOKEN || github.token }}
+
+      - name: Skip (target unreadable — private repo without TARGET_TOKEN secret)
+        if: steps.target.outcome != 'success'
+        run: echo "::warning::skipped ${{ matrix.target.repo }} — set the TARGET_TOKEN secret (fine-grained PAT with Contents:Read on the target org) to scan private repositories"
 
       - uses: actions/setup-go@v5
+        if: steps.target.outcome == 'success'
         with:
           go-version: stable
           cache: false
 
       - name: Detect languages
+        if: steps.target.outcome == 'success'
         id: langs
         run: bash scripts/detect-langs.sh target
 
       # ---------- CodeQL (SAST, per-language) ----------
       - uses: github/codeql-action/init@v3
-        if: steps.langs.outputs.languages != ''
+        if: steps.target.outcome == 'success' && steps.langs.outputs.languages != ''
         with:
           languages: ${{ steps.langs.outputs.languages }}
           queries: security-extended
           config-file: codeql-config.yml
-          build-mode: "go: none"
+          build-mode: none
       - uses: github/codeql-action/analyze@v3
-        if: steps.langs.outputs.languages != ''
+        if: steps.target.outcome == 'success' && steps.langs.outputs.languages != ''
         continue-on-error: true
         with:
           category: ${{ env.TARGET_NAME }}-codeql
 
       # ---------- Trivy (deps + IaC + secrets) ----------
       - name: Prepare output dir
+        if: steps.target.outcome == 'success'
         run: mkdir -p out
       - name: Trivy fs scan
+        if: steps.target.outcome == 'success'
         uses: aquasecurity/trivy-action@v0.36.0
         continue-on-error: true
         with:
@@ -108,13 +119,16 @@ jobs:
 
       # ---------- CLI tool suite ----------
       - name: Run semgrep / gitleaks / gosec / osv-scanner / kube-linter / hadolint / zizmor / bandit
+        if: steps.target.outcome == 'success'
         run: bash scripts/run-tools.sh target out
         continue-on-error: true
 
       - name: Merge SARIF
+        if: steps.target.outcome == 'success'
         run: bash scripts/merge-sarif.sh out
 
       - name: Upload to code scanning
+        if: steps.target.outcome == 'success'
         uses: github/codeql-action/upload-sarif@v3
         continue-on-error: true
         with:
@@ -122,8 +136,8 @@ jobs:
           category: ${{ env.TARGET_NAME }}
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
         if: always()
+        uses: actions/upload-artifact@v4
         with:
           name: sarif-${{ env.TARGET_NAME }}
           path: out/
