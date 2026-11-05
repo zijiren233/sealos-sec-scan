@@ -6,7 +6,7 @@ Scheduled static security scanning for the sealos platform repositories (main re
 
 | Tool | Scope | Output |
 |------|-------|--------|
-| CodeQL (`security-extended`, go `build-mode: none`) | SAST — JS/TS, Go, Python | category `<target>-codeql` |
+| CodeQL (`security-extended`, no-build languages) | SAST — JS/TS, Python (Go via gosec) | category `<target>-codeql` |
 | Semgrep (owasp-top-ten, security-audit, secrets, kubernetes, dockerfile + custom `semgrep-rules/`) | SAST + config | merged SARIF |
 | Gitleaks | secret leakage (file mode, HEAD) | merged SARIF |
 | Gosec (per Go module) | Go SAST | merged SARIF |
