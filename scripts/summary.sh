@@ -12,7 +12,9 @@ scanned=0
 for d in "$RESULTS_DIR"/sarif-*/; do
   [ -d "$d" ] || continue
   t="$(basename "$d" | sed 's/^sarif-//')"
-  s="$d/out/merged.sarif"
+  # upload-artifact strips the uploaded directory prefix
+  s="$d/merged.sarif"
+  [ -s "$s" ] || s="$d/out/merged.sarif"
   [ -s "$s" ] || continue
   n="$(jq -r '[.runs[]?.results[]?] | length' "$s" 2>/dev/null || echo 0)"
   scanned=$((scanned+1))
