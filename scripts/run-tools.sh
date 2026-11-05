@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# CLI tool suite: semgrep, gitleaks, gosec, osv-scanner, kube-linter,
+# CLI tool suite: trivy, semgrep, gitleaks, gosec, osv-scanner, kube-linter,
 # hadolint, zizmor, bandit. Each tool is guarded: missing binary, absent
 # language or scanner error never fails the job, and every expected SARIF
 # file always exists afterwards (valid empty document when nothing ran).
@@ -19,9 +19,21 @@ valid_or_empty() {
 }
 log() { printf '\n==> %s\n' "$*" >&2; }
 
-install() { # url... | tar -xz -C /usr/local/bin <binary>
-  curl -fsSL "$@" >/dev/null 2>&1
-}
+### trivy (deps + IaC + secrets)
+log trivy
+if ! command -v trivy >/dev/null 2>&1; then
+  curl -fsSL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
+    | sh -s -- -b /usr/local/bin >/dev/null 2>&1 || true
+fi
+if command -v trivy >/dev/null 2>&1; then
+  trivy fs --format sarif --output "$OUT/trivy.sarif" \
+    --scanners vuln,misconfig,secret \
+    --severity HIGH,CRITICAL --ignore-unfixed --exit-code 0 \
+    --skip-dirs node_modules --skip-dirs vendor --skip-dirs .git --skip-dirs dist \
+    --skip-dirs "lifecycle/staging" \
+    "$SRC" >/dev/null 2>&1 || true
+fi
+valid_or_empty "$OUT/trivy.sarif"
 
 ### semgrep (multi-language SAST + custom sealos rules)
 log semgrep

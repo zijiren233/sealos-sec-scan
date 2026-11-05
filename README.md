@@ -10,7 +10,7 @@ Scheduled static security scanning for the sealos platform repositories (main re
 | Semgrep (owasp-top-ten, security-audit, secrets, kubernetes, dockerfile + custom `semgrep-rules/`) | SAST + config | merged SARIF |
 | Gitleaks | secret leakage (file mode, HEAD) | merged SARIF |
 | Gosec (per Go module) | Go SAST | merged SARIF |
-| Trivy (vuln + misconfig + secret) | dependencies, IaC, Dockerfiles | merged SARIF |
+| Trivy (vuln + misconfig + secret, binary) | dependencies, IaC, Dockerfiles | merged SARIF |
 | OSV-Scanner | dependency advisories (go.sum / lockfiles) | merged SARIF |
 | kube-linter | Helm charts / K8s manifests | merged SARIF |
 | hadolint | Dockerfiles | merged SARIF |

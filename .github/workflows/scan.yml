@@ -102,20 +102,6 @@ jobs:
       - name: Prepare output dir
         if: steps.target.outcome == 'success'
         run: mkdir -p out
-      - name: Trivy fs scan
-        if: steps.target.outcome == 'success'
-        uses: aquasecurity/trivy-action@v0.36.0
-        continue-on-error: true
-        with:
-          scan-type: fs
-          scan-ref: target
-          scanners: vuln,misconfig,secret
-          format: sarif
-          output: out/trivy.sarif
-          severity: HIGH,CRITICAL
-          ignore-unfixed: true
-          skip-dirs: node_modules,vendor,.git,dist,lifecycle/staging
-          exit-code: "0"
 
       # ---------- CLI tool suite ----------
       - name: Run semgrep / gitleaks / gosec / osv-scanner / kube-linter / hadolint / zizmor / bandit
